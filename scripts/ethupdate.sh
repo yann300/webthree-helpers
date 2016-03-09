@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # author: Lefteris Karapetsas <lefteris@refu.co>
 #
 # A script to update the different ethereum repositories to latest develop
@@ -29,6 +29,7 @@ SHALLOW_FETCH=""
 UPSTREAM=upstream
 ORIGIN=origin
 REQUESTED_BRANCH=develop
+WEB3JS_BRANCH=master
 REQUESTED_ARG=""
 REQUESTED_PROJECT=""
 REPO_URL=""
@@ -76,20 +77,97 @@ function get_repo_url() {
 	fi
 }
 
+# Takes a branch value and if it is not empty or "null" sets the requested branch to it
+# "null" can come from the way jenkins handles empty variables
+function set_requested_branch() {
+	if [[ $1 != "" && $1 != "null" ]]; then
+		REQUESTED_BRANCH=$1
+	fi
+}
+
+# Takes a repository as an argument and using the environment variables tries to see if
+# the requested branch exists for that repo and if it does it sets it
+function get_repo_branch() {
+	if [[ $1 == "" ]]; then
+		echo "ETHUPDATE - ERROR: get_repo_branch() function called without an argument."
+		exit 1
+	fi
+	# get the name of the Requested Branch
+	REQUESTED_BRANCH="develop"
+	case $1 in
+		"webthree-helpers")
+			set_requested_branch $WEBTHREEHELPERS_BRANCH
+			;;
+		"libweb3core")
+			set_requested_branch $LIBWEB3CORE_BRANCH
+			;;
+		"libethereum")
+			set_requested_branch $LIBETHEREUM_BRANCH
+			;;
+		"webthree")
+			set_requested_branch $WEBTHREE_BRANCH
+			;;
+		"web3.js")
+			set_requested_branch $WEB3JS_BRANCH
+			;;
+		"solidity")
+			set_requested_branch $SOLIDITY_BRANCH
+			;;
+		"alethzero")
+			set_requested_branch $ALETHZERO_BRANCH
+			;;
+		"mix")
+			set_requested_branch $MIX_BRANCH
+			;;
+		"tests")
+			set_requested_branch $TESTS_BRANCH
+			;;
+		*)
+			echo "ETHUPDATE - ERROR: Unrecognized repo argument at get_repo_branch() \"$1\".";
+			exit 1
+			;;
+	esac
+	echo "ETHUPDATE - INFO: get_repo_branch() setting branch for $1 to ${REQUESTED_BRANCH}."
+	#if not develop or master we got some work to do
+	if [[ $REQUESTED_BRANCH != "develop" && $REQUESTED_BRANCH != "master" ]]; then
+		if [[ $GH_PR_USER == "" ]];then
+			GH_PR_USER="ethereum"
+			echo "ETHUPDATE - INFO: get_repo_branch() no GH_PR_USER given, defaulting to ethereum repo."
+		fi
+		#fetch the requested branch
+		git fetch https://github.com/${GH_PR_USER}/$1 ${REQUESTED_BRANCH}
+		if [[ $? -ne 0 ]]; then
+			if [[ $GH_PR_USER != "ethereum" ]]; then
+				echo "ETHUPDATE - WARNING: Could not find ${REQUESTED_BRANCH} of ${1} from the fork of ${GH_PR_USER}. Trying the ethereum upstream"
+				git fetch https://github.com/ethereum/$1 ${REQUESTED_BRANCH}
+				if [[ $? -eq 0 ]]; then
+					git checkout FETCH_HEAD
+					echo "ETHUPDATE - INFO: Found ${REQUESTED_BRANCH} of ${1} in the ethereum upstream"
+					return
+				fi
+			fi
+			echo "ETHUPDATE - ERROR: Could not fetch ${REQUESTED_BRANCH} of ${1} for ${GH_PR_USER} or from the ethereum upstream.. Defaulting to develop."
+			REQUESTED_BRANCH="develop"
+                else
+			git checkout FETCH_HEAD
+		fi
+	fi
+}
+
 function print_help {
 	echo "Usage: ethupdate.sh [options]"
 	echo "Arguments:"
-	echo "    --help                    Will print this help message."
+	echo "    --help                  Will print this help message."
 	echo "${PROJECTS_HELP}"
-	echo "    --branch NAME             Will update to the specified branch. Default is ${REQUESTED_BRANCH}."
-	echo "    --origin NAME             Will send the updates back to origin NAME if specified."
-	echo "    --upstream NAME           The name of the remote to pull from. Default is ${UPSTREAM}."
-	echo "    --no-push                 Don't push anything back to origin."
-	echo "    --use-ssh                 Use ssh to clone the repos instead of https."
-	echo "    --shallow-fetch           Perform git clone and git fetch with --depth=1."
-	echo "    --simple-pull             If a branch is given but can't be checked out, then give this argument to attemt a simple git pull"
-	echo "    --build-pr HEX            Will make sure that the main repository for the project has the commit of a particular PR checked out. You can also give the value of none to disable this argument."
-	echo "    --all                     In addition to cloning the repositores needed to build this project, also clone all projects that depend on it"
+	echo "    --branch NAME           Will update to the specified branch. Default is ${REQUESTED_BRANCH}."
+	echo "    --origin NAME           Will send the updates back to origin NAME if specified."
+	echo "    --upstream NAME         The name of the remote to pull from. Default is ${UPSTREAM}."
+	echo "    --no-push               Don't push anything back to origin."
+	echo "    --use-ssh               Use ssh to clone the repos instead of https."
+	echo "    --shallow-fetch         Perform git clone and git fetch with --depth=1."
+	echo "    --simple-pull           If a branch is given but can't be checked out, then give this argument to attemt a simple git pull"
+	echo "    --build-pr HEX          Will make sure that the main repository for the project has the commit of a particular PR checked out. You can also give the value of none to disable this argument."
+	echo "    --all                   In addition to cloning the repositores needed to build this project, also clone all projects that depend on it"
 }
 
 for arg in ${@:1}
@@ -217,15 +295,18 @@ do
 		BRANCH="(unnamed branch)"     # detached HEAD
 	BRANCH=${BRANCH##refs/heads/}
 
-	# if the "none" value was given then checkout and pull develop.
-	# Web3.js is excused from here since it only has a master branch and we don't really build it
-	if [[ $BUILD_PR == "none" && $repository != "web3.js" ]]; then
-		REQUESTED_BRANCH="develop"
-		git checkout develop
+	get_repo_branch $repository
+	# if the "none" value was given then checkout and pull requested branch
+	if [[ $BUILD_PR == "none" ]]; then
+		git checkout -f $REQUESTED_BRANCH
 		if [[ $? -ne 0 ]]; then
-			echo "ETHUPDATE - ERROR: Could not checkout develop for ${repository}."
+			echo "ETHUPDATE - ERROR: Could not checkout \"${REQUESTED_BRANCH}\" for ${repository}."
 			exit 1
+		else
+			echo "ETHUPDATE - INFO: Checked out branch ${REQUESTED_BRANCH} for repository ${repository}."
 		fi
+	else
+		get_repo_branch $repository
 	fi
 
 	# if we need to checkout specific commit for a PR do so
@@ -233,34 +314,47 @@ do
 		echo "ETHUPDATE - INFO: Checking out commit ${BUILD_PR} for ${repository} as requested."
 		get_repo_url $repository
 		git fetch --tags --progress $REPO_URL +refs/pull/*:refs/remotes/origin/pr/*
-		git checkout $BUILD_PR
+		git checkout -f $BUILD_PR
 		cd $ROOT_DIR
 		continue
-	elif [[ $BRANCH != $REQUESTED_BRANCH ]]; then
-		if [[ $DO_SIMPLE_PULL -eq 1 ]]; then
-			echo "ETHUPDATE - INFO: ${repository} not in the ${REQUESTED_BRANCH} branch but performing simple pull anyway ..."
-			git pull $SHALLOW_FETCH
-			if [[ $? -ne 0 ]]; then
-				echo "ETHUPDATE - ERROR: Doing a simple pull for ${repository} failed. Skipping this repository ..."
-			fi
-			git submodule update
+	elif [[ $DO_SIMPLE_PULL -eq 1 ]]; then
+		echo "ETHUPDATE - INFO: Performing simple pull for ${repository} ..."
+		git pull $SHALLOW_FETCH
+		if [[ $? -ne 0 ]]; then
+			echo "ETHUPDATE - ERROR: Doing a simple pull for ${repository} failed. Skipping this repository ..."
+		fi
+		git submodule update
+		cd $ROOT_DIR
+		continue
+	fi
+
+	if [[ $REQUESTED_BRANCH != "develop" && $REQUESTED_BRANCH != "master" ]];then
+		#by this point we should have succesfully fetched the branch from the remote so just check it out
+		git checkout -f $REQUESTED_BRANCH
+		if [[ $? -ne 0 ]]; then
+			echo "ETHUPDATE - ERROR: Could not check out branch ${REQUESTED_BRANCH} for repository ${repository}. Skipping ..."
 		else
-			echo "ETHUPDATE - WARNING: Not updating ${repository} because it's not in the ${REQUESTED_BRANCH} branch"
+			echo "ETHUPDATE - INFO: Checked out branch ${REQUESTED_BRANCH} for repository ${repository}."
 		fi
 		cd $ROOT_DIR
 		continue
-
 	fi
 
 	# Pull changes from what the user set as the upstream repository, unless it's just been cloned
 	if [[ $CLONED_THE_REPO -eq 0 ]]; then
+		if [[ $REQUESTED_BRANCH == "develop" || $REQUESTED_BRANCH == "master" ]]; then
+			# We get here if no special branch was requested, so make sure we got the non-special
+			# branch checked out before pulling
+			echo "ETHUPDATE - INFO: Make sure we are in $REQUESTED_BRANCH"
+			git checkout -f $REQUESTED_BRANCH
+		fi
 		git pull $UPSTREAM $REQUESTED_BRANCH $SHALLOW_FETCH
 		git submodule update
 	else
 		# if just cloned, make a local branch tracking the origin's requested branch
 		git fetch origin $SHALLOW_FETCH
 		if [[ $BRANCH != $REQUESTED_BRANCH ]]; then
-			git checkout --track -b $REQUESTED_BRANCH origin/$REQUESTED_BRANCH
+			git checkout -f --track -b $REQUESTED_BRANCH origin/$REQUESTED_BRANCH
 		fi
 	fi
 

@@ -45,17 +45,17 @@ endmacro()
 
 macro(eth_copy_dll EXECUTABLE DLL)
 	# dlls must be unsubstitud list variable (without ${}) in format
-	# optimized;path_to_dll.dll;debug;path_to_dlld.dll 
+	# optimized;path_to_dll.dll;debug;path_to_dlld.dll
 	if(DEFINED MSVC)
 		list(GET ${DLL} 1 DLL_RELEASE)
 		list(GET ${DLL} 3 DLL_DEBUG)
 		add_custom_command(TARGET ${EXECUTABLE}
-			PRE_BUILD 
-			COMMAND ${CMAKE_COMMAND} ARGS 
-			-DDLL_RELEASE="${DLL_RELEASE}" 
-			-DDLL_DEBUG="${DLL_DEBUG}" 
+			PRE_BUILD
+			COMMAND ${CMAKE_COMMAND} ARGS
+			-DDLL_RELEASE="${DLL_RELEASE}"
+			-DDLL_DEBUG="${DLL_DEBUG}"
 			-DCONF="$<CONFIGURATION>"
-			-DDESTINATION="${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}" 
+			-DDESTINATION="${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}"
 			-P "${ETH_SCRIPTS_DIR}/copydlls.cmake"
 		)
 	endif()
@@ -67,11 +67,11 @@ macro(eth_copy_dlls EXECUTABLE)
 	endforeach(dll)
 endmacro()
 
-# 
+#
 # this function requires the following variables to be specified:
 # ETH_DEPENDENCY_INSTALL_DIR
 #
-# params: 
+# params:
 # QMLDIR
 #
 
@@ -82,7 +82,7 @@ macro(eth_install_executable EXECUTABLE)
 	set (one_value_args QMLDIR)
 	set (multi_value_args)
 	cmake_parse_arguments (ETH_INSTALL_EXECUTABLE "${options}" "${one_value_args}" "${multi_value_args}" "${extra_macro_args}")
-	
+
 	if (ETH_INSTALL_EXECUTABLE_QMLDIR)
 		if (APPLE)
 			set(eth_qml_dir "-qmldir=${ETH_INSTALL_EXECUTABLE_QMLDIR}")
@@ -99,7 +99,7 @@ macro(eth_install_executable EXECUTABLE)
 			WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 			COMMAND sh ${ETH_SCRIPTS_DIR}/macdeployfix.sh ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${EXECUTABLE}.app/Contents
 		)
-			
+
 		# This tool and next will inspect linked libraries in order to determine which dependencies are required
 		if (${CMAKE_CFG_INTDIR} STREQUAL ".")
 			# TODO: This should only happen for GUI application
@@ -130,20 +130,20 @@ macro(eth_install_executable EXECUTABLE)
 			)
 		endif()
 
-		install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Debug"
+		install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Debug/"
 			DESTINATION .
 			CONFIGURATIONS Debug
 			COMPONENT ${EXECUTABLE}
 		)
 
-		install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Release"
+		install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Release/"
 			DESTINATION .
 			CONFIGURATIONS Release
 			COMPONENT ${EXECUTABLE}
 		)
 
 		install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/RelWithDebInfo/"
-			DESTINATION bin
+			DESTINATION .
 			CONFIGURATIONS RelWithDebInfo
 			COMPONENT ${EXECUTABLE}
 		)
@@ -168,43 +168,54 @@ macro(eth_nsis)
 	if (DEFINED MSVC)
 		# packaging stuff
 		include(InstallRequiredSystemLibraries)
-        set(CPACK_PACKAGE_NAME "Ethereum")
-		set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The Ethereum Toolset")
+		set(CPACK_GENERATOR "NSIS")
+		set(CPACK_PACKAGE_NAME "Ethereum")
+		set(CPACK_PACKAGE_FILE_NAME "Ethereum")
+		set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Ethereum C++")
 		set(CPACK_PACKAGE_VENDOR "ethereum.org")
 		set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 		set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 		set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-		set(CPACK_GENERATOR "NSIS")
+		set(CPACK_NSIS_DISPLAY_NAME "Ethereum")
+		set(CPACK_PACKAGE_INSTALL_DIRECTORY "Ethereum")
+		set(CPACK_NSIS_HELP_LINK "https://ethereum.org")
+		set(CPACK_NSIS_URL_INFO_ABOUT "https://ethereum.org")
+		set(CPACK_NSIS_CONTACT "ethereum.org")
+		set(CPACK_NSIS_MODIFY_PATH OFF)
+		set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/res/win/alethzero.ico")
+		set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/res/win/alethzero.ico")
+		set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL TRUE)
+		if (CMAKE_CL_64)
+			set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES64")
+			set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${CPACK_PACKAGE_NAME} ${CPACK_PACKAGE_VERSION}")
+		else ()
+			set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES")
+			set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${CPACK_PACKAGE_NAME} ${CPACK_PACKAGE_VERSION} (Win32)")
+		endif()
 
 		set(CPACK_COMPONENT_ALETHZERO_GROUP "Applications")
 		set(CPACK_COMPONENT_ALETHONE_GROUP "Applications")
-		set(CPACK_COMPONENT_ALETHFIVE_GROUP "Applications")
 		set(CPACK_COMPONENT_MIX_GROUP "Applications")
 		set(CPACK_COMPONENT_SOLC_GROUP "CLI")
 		set(CPACK_COMPONENT_ETH_GROUP "CLI")
 		set(CPACK_COMPONENT_ETHMINER_GROUP "CLI")
+		set(CPACK_COMPONENT_ETHKEY_GROUP "CLI")
 		set(CPACK_COMPONENT_RLP_GROUP "CLI")
 		set(CPACK_COMPONENT_ABI_GROUP "CLI")
 
-		set(CPACK_COMPONENTS_ALL AlethZero AlethOne AlethFive Mix solc eth ethminer rlp abi)
+		# Make GUI components required as we creating links for them
+		set(CPACK_COMPONENT_ALETHZERO_REQUIRED TRUE)
+		set(CPACK_COMPONENT_ALETHONE_REQUIRED TRUE)
+		set(CPACK_COMPONENT_MIX_REQUIRED TRUE)
 
-		# nsis specific stuff
-		if (CMAKE_CL_64)
-			set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES64")
-			set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${CPACK_PACKAGE_NAME} ${CPACK_PACKAGE_VERSION} (Win64)")
-		else ()
-			set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES")
-			set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${CPACK_PACKAGE_NAME} ${CPACK_PACKAGE_VERSION}")
-		endif()
+		set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
+		set(CPACK_PACKAGE_EXECUTABLES
+			"AlethZero;AlethZero"
+			"AlethOne;AlethOne"
+			"Mix;Mix"
+		)
 
-		set(CPACK_PACKAGE_FILE_NAME "Ethereum")
-		set(CPACK_NSIS_DISPLAY_NAME "Ethereum")
-		set(CPACK_NSIS_HELP_LINK "https://github.com/ethereum/cpp-ethereum")
-		set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/ethereum/cpp-ethereum")
-		set(CPACK_NSIS_CONTACT "ethereum.org")
-		set(CPACK_NSIS_MODIFY_PATH ON)
-		set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/res/win/alethzero.ico")
-		set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/res/win/alethzero.ico")
+		set(CPACK_COMPONENTS_ALL AlethZero AlethOne Mix solc eth ethminer ethkey)
 
 		include(CPack)
 	endif ()
@@ -229,7 +240,7 @@ macro(eth_appdmg)
 	endif()
 endmacro()
 
-macro(jsonrcpstub_client_create SPEC CLIENTNAME CLIENTFILENAME)
+macro(jsonrpcstub_client_create SPEC CLIENTNAME CLIENTDIR CLIENTFILENAME)
 	if (ETH_JSON_RPC_STUB)
 		add_custom_target(${SPEC}stub)
 		add_custom_command(
@@ -238,7 +249,7 @@ macro(jsonrcpstub_client_create SPEC CLIENTNAME CLIENTFILENAME)
 		DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SPEC}"
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMAND ${CMAKE_COMMAND} -DETH_SPEC_PATH="${CMAKE_CURRENT_SOURCE_DIR}/${SPEC}" -DETH_SOURCE_DIR="${CMAKE_SOURCE_DIR}" -DETH_CMAKE_DIR="${ETH_CMAKE_DIR}"
-			-DETH_CLIENT_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+			-DETH_CLIENT_DIR="${CLIENTDIR}"
 			-DETH_CLIENT_NAME=${CLIENTNAME}
 			-DETH_CLIENT_FILENAME=${CLIENTFILENAME}
 			-DETH_JSON_RPC_STUB="${ETH_JSON_RPC_STUB}"
@@ -247,3 +258,26 @@ macro(jsonrcpstub_client_create SPEC CLIENTNAME CLIENTFILENAME)
 		add_dependencies(${EXECUTABLE} ${SPEC}stub)
 	endif ()
 endmacro()
+
+macro(jsonrpcstub_create SPEC SERVERNAME SERVERDIR SERVERFILENAME CLIENTNAME CLIENTDIR CLIENTFILENAME)
+	if (ETH_JSON_RPC_STUB)
+		add_custom_target(${SPEC}stub)
+		add_custom_command(
+		TARGET ${SPEC}stub
+		POST_BUILD
+		DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SPEC}"
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		COMMAND ${CMAKE_COMMAND} -DETH_SPEC_PATH="${CMAKE_CURRENT_SOURCE_DIR}/${SPEC}" -DETH_SOURCE_DIR="${CMAKE_SOURCE_DIR}" -DETH_CMAKE_DIR="${ETH_CMAKE_DIR}"
+			-DETH_CLIENT_DIR="${CLIENTDIR}"
+			-DETH_CLIENT_NAME=${CLIENTNAME}
+			-DETH_CLIENT_FILENAME=${CLIENTFILENAME}
+			-DETH_SERVER_DIR="${SERVERDIR}"
+			-DETH_SERVER_NAME=${SERVERNAME}
+			-DETH_SERVER_FILENAME=${SERVERFILENAME}
+			-DETH_JSON_RPC_STUB="${ETH_JSON_RPC_STUB}"
+			-P "${ETH_SCRIPTS_DIR}/jsonrpcstub.cmake"
+			)
+		add_dependencies(${EXECUTABLE} ${SPEC}stub)
+	endif ()
+endmacro()
+

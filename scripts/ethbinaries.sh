@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # author: Lefteris Karapetsas <lefteris@refu.co>
 #
 # A script to build the binaries of ethereum cpp repos
@@ -17,7 +17,7 @@ function print_help {
 DEV_TEST=0
 CLEAN_BUILD=1
 MAKE_CORES=4
-GIVEN_VERSION=1.0rc2 #default - mainly for testing if no version is given
+GIVEN_VERSION=1.2.1 #default - mainly for testing if no version is given
 
 for arg in ${@:1}
 do
@@ -76,6 +76,17 @@ done
 if [[ ${REQUESTED_ARG} != "" ]]; then
 	echo "ERROR: Expected value for the \"${REQUESTED_ARG}\" argument";
 	exit 1
+fi
+
+# If we need to also run tests clone/update the tests repo
+if [[ $DEV_TEST -eq 1 ]]; then
+	if [[ ! -d "tests" ]]; then
+		git clone https://github.com/ethereum/tests
+	else
+		cd tests
+		git pull origin master
+		cd ..
+	fi
 fi
 
 if [[ ! -d "webthree-umbrella" ]]; then

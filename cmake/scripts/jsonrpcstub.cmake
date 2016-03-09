@@ -17,9 +17,11 @@
 # For an example call look at libethereum/CMakeLists.txt for eth::dev::Sentinel
 if (ETH_SERVER_FILENAME)
 	set(SERVER_TMPFILE "${ETH_SERVER_DIR}/${ETH_SERVER_FILENAME}.h.tmp")
+	set(SERVER_TMPFILE2 "${ETH_SERVER_DIR}/${ETH_SERVER_FILENAME}.h.tmp2")
 	set(SERVER_OUTFILE "${ETH_SERVER_DIR}/${ETH_SERVER_FILENAME}.h")
 else ()
 	set(SERVER_TMPFILE "${ETH_SERVER_DIR}/${ETH_SERVER_NAME}.h.tmp")
+	set(SERVER_TMPFILE2 "${ETH_SERVER_DIR}/${ETH_SERVER_NAME}.h.tmp2")
 	set(SERVER_OUTFILE "${ETH_SERVER_DIR}/${ETH_SERVER_NAME}.h")
 endif()
 if (ETH_CLIENT_FILENAME)
@@ -36,7 +38,7 @@ if (NOT ETH_SERVER_DIR)
 		COMMAND ${ETH_JSON_RPC_STUB} ${ETH_SPEC_PATH}
 			--cpp-client=${ETH_CLIENT_NAME} --cpp-client-file=${CLIENT_TMPFILE}
 			OUTPUT_VARIABLE ERR ERROR_QUIET
-			)
+	)
 else ()
 	execute_process(
 		COMMAND ${ETH_JSON_RPC_STUB} ${ETH_SPEC_PATH}
@@ -44,6 +46,24 @@ else ()
 			--cpp-client=${ETH_CLIENT_NAME} --cpp-client-file=${CLIENT_TMPFILE}
 			OUTPUT_VARIABLE ERR ERROR_QUIET
 	)
+
+	# get name without namespace
+	string(REPLACE "::" ";" SERVER_NAME_LIST ${ETH_SERVER_NAME})
+	list(LENGTH SERVER_NAME_LIST SERVER_NAME_LENGTH)
+	math(EXPR SERVER_NAME_POS "${SERVER_NAME_LENGTH} - 1")
+	list(GET SERVER_NAME_LIST ${SERVER_NAME_POS} SERVER_NAME)
+
+	file(READ ${SERVER_TMPFILE} SERVER_CONTENT)
+
+	# The following cmake regexps are equal to this sed command
+	# 	sed -e s/include\ \<jsonrpccpp\\/server\.h\>/include\ ${INCLUDE_NAME}/g \
+	#		-e s/public\ jsonrpc::AbstractServer\<${NAME}\>/public\ ServerInterface\<${NAME}\>/g \
+	#		-e s/${NAME}\(jsonrpc::AbstractServerConnector\ \&conn,\ jsonrpc::serverVersion_t\ type\ =\ jsonrpc::JSONRPC_SERVER_V2\)\ :\ jsonrpc::AbstractServer\<${NAME}\>\(conn,\ type\)/${NAME}\(\)/g \
+	string(REGEX REPLACE "include\ <jsonrpccpp/server.h>" "include\ \"ModularServer.h\"" SERVER_CONTENT "${SERVER_CONTENT}")
+	string(REGEX REPLACE "public\ jsonrpc::AbstractServer<${SERVER_NAME}>" "public ServerInterface<${SERVER_NAME}>" SERVER_CONTENT "${SERVER_CONTENT}")
+	string(REGEX REPLACE "${SERVER_NAME}\\(jsonrpc::AbstractServerConnector\ &conn,\ jsonrpc::serverVersion_t\ type\ =\ jsonrpc::JSONRPC_SERVER_V2\\)\ :\ jsonrpc::AbstractServer<${SERVER_NAME}>\\(conn, type\\)" "${SERVER_NAME}()" SERVER_CONTENT "${SERVER_CONTENT}")
+
+	file(WRITE ${SERVER_TMPFILE2} "${SERVER_CONTENT}")
 endif()
 
 # don't throw fatal error on jsonrpcstub error, someone might have old version of jsonrpcstub,
@@ -55,7 +75,8 @@ if (ERR)
 else()
 	include("${ETH_CMAKE_DIR}/EthUtils.cmake")
 	if (ETH_SERVER_DIR)
-		replace_if_different("${SERVER_TMPFILE}" "${SERVER_OUTFILE}")
+		file(REMOVE "${SERVER_TMPFILE}")
+		replace_if_different("${SERVER_TMPFILE2}" "${SERVER_OUTFILE}")
 	endif()
 	replace_if_different("${CLIENT_TMPFILE}" "${CLIENT_OUTFILE}")
 endif()
